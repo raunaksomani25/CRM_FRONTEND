@@ -6,8 +6,8 @@ function Popup({ type = "error", message, onClose }) {
   if (!message) return null;
 
   const colors = {
-    error: "#dc3545", 
-    success: "#28a745", 
+    error: "#dc3545",
+    success: "#28a745",
   };
 
   const style = {
@@ -41,11 +41,10 @@ function Customers() {
     email: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(true); // loading state for fetch
   const [popup, setPopup] = useState({ type: "", message: "" });
 
-  const showPopup = (type, message) => {
-    setPopup({ type, message });
-  };
+  const showPopup = (type, message) => setPopup({ type, message });
 
   useEffect(() => {
     if (popup.message) {
@@ -55,12 +54,17 @@ function Customers() {
   }, [popup]);
 
   const fetchCustomers = async () => {
+    setIsFetching(true);
     try {
       const res = await api.get("/customers");
-      setCustomers(res.data);
+      // Ensure res.data is an array
+      setCustomers(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
       showPopup("error", "Failed to fetch customers");
+      setCustomers([]); // fallback to empty array
+    } finally {
+      setIsFetching(false);
     }
   };
 
@@ -88,6 +92,7 @@ function Customers() {
     <div className="container py-4">
       <Layout>
         <h1 className="mb-4 text-center">Customers</h1>
+
         <form
           onSubmit={handleSubmit}
           className="row g-3 mb-5 align-items-end justify-content-center"
@@ -134,12 +139,12 @@ function Customers() {
         </form>
 
         <div className="table-responsive">
-          {customers.length === 0 ? (
+          {isFetching ? (
+            <div className="text-center py-5 text-muted">Loading customers...</div>
+          ) : customers.length === 0 ? (
             <div className="text-center py-5 text-muted">
               <div style={{ fontSize: "2rem" }}>👥</div>
-              <p className="mt-2">
-                No customers found. Add your first customer above.
-              </p>
+              <p className="mt-2">No customers found. Add your first customer above.</p>
             </div>
           ) : (
             <table className="table table-striped align-middle">
