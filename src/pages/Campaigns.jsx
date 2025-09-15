@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../utils/axios";
 import Layout from "./Layout";
+
 function ErrorPopup({ message, onClose }) {
   if (!message) return null;
 
@@ -88,10 +89,11 @@ function Campaigns() {
   const [objective, setObjective] = useState("");
   const [aiSuggestions, setAiSuggestions] = useState([]);
   const [showAiModal, setShowAiModal] = useState(false);
-
   const [error, setError] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+
+  // Clear error popup after 4 seconds
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(""), 4000);
@@ -99,17 +101,27 @@ function Campaigns() {
     }
   }, [error]);
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const locked = showLogsModal || showAiModal;
+    document.body.style.overflow = locked ? "hidden" : "";
+  }, [showLogsModal, showAiModal]);
+
+  // Fetch campaigns and segments
   const fetchData = async () => {
     try {
       const [campaignRes, segmentRes] = await Promise.all([
         api.get("/campaigns"),
         api.get("/segments"),
       ]);
-      setCampaigns(campaignRes.data);
-      setSegments(segmentRes.data);
+
+      setCampaigns(Array.isArray(campaignRes.data) ? campaignRes.data : []);
+      setSegments(Array.isArray(segmentRes.data) ? segmentRes.data : []);
     } catch (err) {
       console.error(err);
       setError("Failed to fetch campaigns or segments");
+      setCampaigns([]);
+      setSegments([]);
     }
   };
 
@@ -119,11 +131,6 @@ function Campaigns() {
       document.body.style.overflow = "";
     };
   }, []);
-
-  useEffect(() => {
-    const locked = showLogsModal || showAiModal;
-    document.body.style.overflow = locked ? "hidden" : "";
-  }, [showLogsModal, showAiModal]);
 
   const handleChange = (e) => {
     setNewCampaign({ ...newCampaign, [e.target.name]: e.target.value });
@@ -157,18 +164,15 @@ function Campaigns() {
       const res = await api.post("/ai/messages", { objective });
 
       let suggestions = res.data?.suggestions || [];
-      if (typeof suggestions === "string") {
+      if (!Array.isArray(suggestions)) {
         try {
           suggestions = JSON.parse(suggestions);
+          if (!Array.isArray(suggestions)) suggestions = [String(suggestions)];
         } catch {
           suggestions = [String(suggestions)];
         }
       }
-      if (!Array.isArray(suggestions)) suggestions = [String(suggestions)];
-
-      suggestions = suggestions
-        .map((s) => String(s).trim())
-        .filter((s) => s.length > 0);
+      suggestions = suggestions.map((s) => String(s).trim()).filter(Boolean);
 
       setAiSuggestions(suggestions);
       setShowAiModal(true);
@@ -201,6 +205,8 @@ function Campaigns() {
     <div className="container py-4" style={{ minHeight: "100vh" }}>
       <Layout>
         <h1 className="mb-4 text-center">Campaigns</h1>
+
+        {/* Campaign Form */}
         <div className="mx-5">
           <div className="row g-3">
             <div className="col-md-4">
@@ -221,11 +227,12 @@ function Campaigns() {
                 className="form-select"
               >
                 <option value="">Select Segment</option>
-                {segments.map((s) => (
-                  <option key={s._id} value={s._id}>
-                    {s.name} (Audience: {s.audienceCount || s.audienceSize || 0})
-                  </option>
-                ))}
+                {Array.isArray(segments) &&
+                  segments.map((s) => (
+                    <option key={s._id} value={s._id}>
+                      {s.name} (Audience: {s.audienceCount || s.audienceSize || 0})
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
@@ -293,7 +300,9 @@ function Campaigns() {
             </div>
           </div>
         </div>
-        <br></br>
+
+        {/* Campaign History Table */}
+        <br />
         <h2 className="mx-3">Campaign History</h2>
         <div className="table-responsive">
           <table className="table table-striped align-middle">
@@ -309,27 +318,37 @@ function Campaigns() {
               </tr>
             </thead>
             <tbody>
-              {campaigns.map((c) => (
-                <tr key={c._id}>
-                  <td>{c.name}</td>
-                  <td>{c.segment?.name || "N/A"}</td>
-                  <td>{c.audienceSize}</td>
-                  <td>{c.sentCount}</td>
-                  <td>{c.failedCount}</td>
-                  <td>{new Date(c.createdAt).toLocaleString()}</td>
-                  <td>
-                    <button
-                      className="btn btn-sm btn-outline-primary"
-                      onClick={() => viewLogs(c._id)}
-                    >
-                      View Logs
-                    </button>
+              {Array.isArray(campaigns) && campaigns.length > 0 ? (
+                campaigns.map((c) => (
+                  <tr key={c._id}>
+                    <td>{c.name}</td>
+                    <td>{c.segment?.name || "N/A"}</td>
+                    <td>{c.audienceSize || 0}</td>
+                    <td>{c.sentCount || 0}</td>
+                    <td>{c.failedCount || 0}</td>
+                    <td>{c.createdAt ? new Date(c.createdAt).toLocaleString() : "N/A"}</td>
+                    <td>
+                      <button
+                        className="btn btn-sm btn-outline-primary"
+                        onClick={() => viewLogs(c._id)}
+                      >
+                        View Logs
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="text-center">
+                    No campaigns found
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
+
+        {/* Logs Modal */}
         <Modal
           title="Delivery Logs"
           show={showLogsModal}
@@ -365,30 +384,32 @@ function Campaigns() {
           </div>
         </Modal>
 
+        {/* AI Suggestions Modal */}
         <Modal
           title="AI Suggestions"
-          show={showAiModal && aiSuggestions.length > 0}
+          show={showAiModal && Array.isArray(aiSuggestions) && aiSuggestions.length > 0}
           onClose={() => setShowAiModal(false)}
         >
           <div className="list-group">
-            {aiSuggestions.map((msg, idx) => (
-              <div
-                key={idx}
-                className="list-group-item d-flex justify-content-between align-items-start"
-              >
-                <div className="me-3" style={{ flex: 1 }}>
-                  <p className="mb-0">{msg}</p>
+            {Array.isArray(aiSuggestions) &&
+              aiSuggestions.map((msg, idx) => (
+                <div
+                  key={idx}
+                  className="list-group-item d-flex justify-content-between align-items-start"
+                >
+                  <div className="me-3" style={{ flex: 1 }}>
+                    <p className="mb-0">{msg}</p>
+                  </div>
+                  <div>
+                    <button
+                      className="btn btn-sm btn-success"
+                      onClick={() => useAiSuggestion(msg)}
+                    >
+                      Use
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <button
-                    className="btn btn-sm btn-success"
-                    onClick={() => useAiSuggestion(msg)}
-                  >
-                    Use
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))}
           </div>
         </Modal>
 
