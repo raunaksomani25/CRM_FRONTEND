@@ -8,7 +8,7 @@ function Login() {
   const handleLogin = () => {
     try {
       setIsLoading(true);
-      window.location.href = "http://localhost:5000/auth/google";
+      window.location.href = "https://crm-backend-fsez.onrender.com/auth/google";
     } catch (err) {
       console.error("Login failed:", err);
       setError("Something went wrong while redirecting to Google. Please try again.");
